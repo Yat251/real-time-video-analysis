@@ -1,0 +1,147 @@
+
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ video.title }}</title>
+</head>
+<body>
+    <h2>Hi <tr>{{ request.user.socialaccount_set.all.0.extra_data.given_name }}</tr>    <small><a href="{% url 'account_logout' %}">[logout?]</a></small></h2>
+    <h1>Player</h1>
+    <!-- <video id="my-video" width="100px" height="100px" src="..\media\theme.mp4"></video> -->
+    <video id="video" width="320" height="240" controls>
+        <source src="{{ video.videofile.url }}" type="video/mp4">
+        <!-- Your browser does not support the video tag. -->
+    </video>
+
+    <div>
+        <span id="played">0</span> seconds out of 
+        <span id="duration"></span> seconds. (only updates when the video pauses)
+    </div>
+
+    <h3>Uploaded Videos list:</h3>
+    {% for video in videos %}
+        <a href="/player/{{video.id}}">{{video.title}}</a> <br>
+    {% endfor %}
+
+</body>
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js" type="text/javascript"></script>
+<script>
+    var video = document.getElementById("video");
+
+    var timeStarted = -1;
+    var timePlayed = 0;
+    var duration = 0;
+    var playedFor = 0;
+    // If video metadata is laoded get duration
+    if(video.readyState > 0)
+        getDuration.call(video);
+        //If metadata not loaded, use event to get it
+    else
+    {
+        video.addEventListener('loadedmetadata', getDuration);
+    }
+
+    // remember time user started the video
+    function videoStartedPlaying() {
+        timeStarted = new Date().getTime()/1000;
+    }
+    function videoStoppedPlaying(event) {
+        // Start time less then zero means stop event was fired vidout start event
+        if(timeStarted>0) {
+            playedFor = new Date().getTime()/1000 - timeStarted;
+            timeStarted = -1;
+            // add the new number of seconds played
+            timePlayed+=playedFor;
+        }
+        console.log(timePlayed);
+        document.getElementById("played").innerHTML = Math.round(timePlayed)+"";
+        // Count as complete only if end of video was reached
+        var ended=false;
+        if(event.type=="ended") {
+            ended=true
+        }
+        // sendWatchTime(Math.round(timePlayed));
+        updateWatchTime(ended);
+        playedFor=0
+    }
+
+    function getDuration() {
+        duration = video.duration;
+        document.getElementById("duration").appendChild(new Text(Math.round(duration)+""));
+        console.log("Duration: ", duration);
+    }
+
+    // function sendWatchTime(watchTime) {
+    //     var watchTimeInput = document.getElementById("watch-time-input");
+    //     watchTimeInput.value = 2;
+    //     document.getElementById("watch-time-form").submit();
+    // }
+
+    let csrfcookie = function() {
+            let cookieValue = null,
+                name = "csrftoken";
+            if (document.cookie && document.cookie !== "") {
+                let cookies = document.cookie.split(";");
+                for (let i = 0; i < cookies.length; i++) {
+                    let cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) == (name + "=")) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        };
+
+    function updateWatchTime(ended){
+        // var currentTime = Math.round(video.currentTime);
+        console.log(ended)
+        $.ajax({
+            url: "/player/track",
+            type: "POST",
+            dataType: 'json',
+            beforeSend: function(request, settings) {
+                        if (!(/^http:.*/.test(settings.url) || /^https:.*/.test(settings.url))) {
+                            request.setRequestHeader("X-CSRFToken", csrfcookie());
+                        }
+                    },
+            contentType:  "application/json",//'text/plain', //'json',
+            data: JSON.stringify({
+                "video_id": "{{video.id}}",
+                "duration": Math.round(timePlayed)+"",
+                "ended":ended,
+                "runtime":duration,
+                "playedFor":playedFor
+            }),
+            success: function(response) {
+                console.log(response);
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                console.log(textStatus, errorThrown);
+            }
+        });
+    }
+
+    function switched_to_other(){
+        videoStoppedPlaying;
+    }
+    function videoEndedPlaying() {
+        videoStoppedPlaying();
+        //increase count in Video watch
+        // updateVideoWatch();
+    }
+    video.addEventListener("play", videoStartedPlaying);
+    video.addEventListener("playing", videoStartedPlaying);
+
+    video.addEventListener("ended", videoStoppedPlaying);
+    video.addEventListener("pause", videoStoppedPlaying);
+
+    window.onbeforeunload = videoStoppedPlaying;
+
+</script>
+</html>
